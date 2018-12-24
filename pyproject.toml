@@ -37,6 +37,8 @@ test = [
 px4_attitude = "uloganalysis.attitudeanalysis:main"
 px4_position = "uloganalysis.positionanalysis:main"
 px4_vehicle_status = "uloganalysis.vehiclestatusanalysis:main"
+px4_position_global = "uloganalysis.globalposition:main"
+
 
 [tool.black]
 line-length = 79
