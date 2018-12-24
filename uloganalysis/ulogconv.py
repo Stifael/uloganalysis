@@ -94,13 +94,18 @@ def merge(
         else:
             m = pd.merge_ordered(m, pandadict[topic], on="timestamp", how=how)
     m.index = pd.TimedeltaIndex(m.timestamp * 1e3, unit="ns")
-    m.interpolate(
-        mehtod=method,
-        limit=limit,
-        inplace=True,
-        limit_direction=limit_direction,
-        limit_area=limit_area,
-    )
+
+    if method is "zero":
+        m = m.fillna(method="ffill")
+        m.dropna()
+    else:
+        m.interpolate(
+            method=method,
+            limit=limit,
+            inplace=True,
+            limit_direction=limit_direction,
+            limit_area=limit_area,
+        )
     return m
 
 
