@@ -6,6 +6,7 @@ import pandas as pd
 import transforms3d.quaternions as quat
 import transforms3d.taitbryan as tf
 import numpy as np
+import utm
 
 
 def series_quat2euler(q0, q1, q2, q3, msg_name=""):
@@ -81,3 +82,27 @@ def series_pythagoras(x0, y0, dotname=""):
         [np.linalg.norm([x0i, y0i], axis=0) for x0i, y0i in zip(x0, y0)]
     )
     return pd.Series(name=dotname, data=pythagoras, index=x0.index)
+
+
+def series_UTM(lat, lon, msg_name=""):
+    """
+    Given pandas series lat/lon in degrees, compute UTM easting/northing/zone)
+    """
+    easting, northing, zone, letter = np.array(
+        [utm.from_latlon(lati, loni) for lati, loni in zip(lat, lon)]
+    ).T
+
+    easting = pd.Series(
+        name=msg_name + "easting",
+        data=easting.astype(np.float),
+        index=lat.index,
+    )
+    northing = pd.Series(
+        name=msg_name + "northing",
+        data=northing.astype(np.float),
+        index=lat.index,
+    )
+    zone = pd.Series(
+        name=msg_name + "zone", data=zone.astype(np.float), index=lat.index
+    )
+    return easting, northing, zone
