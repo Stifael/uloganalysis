@@ -18,6 +18,9 @@ from matplotlib.backends.backend_pdf import PdfPages
 parser = argparse.ArgumentParser(description="Script to process attitude")
 parser.add_argument("filename", metavar="file.ulg", help="ulog file")
 
+# To run this scipt, the following topics are
+TOPICS_REQUIRED = ["vehicle_attitude", "vehicle_attitude_setpoint"]
+
 
 def check_directory(filename):
     if os.path.isfile(filename):
@@ -30,15 +33,25 @@ def check_directory(filename):
         parser.error("File does not exist")
 
 
+def get_required_topics():
+    return TOPICS_REQUIRED
+
+
 def get_attitude_state_setpoint_from_file(f):
     """
-    return attitude-euler, setpoint and error
+    return dataframe and ulog for attitude/setpoint topic
     """
 
-    topics = ["vehicle_attitude", "vehicle_attitude_setpoint"]
-    ulog = pyulog.ULog(f, topics)
+    ulog = pyulog.ULog(f, TOPICS_REQUIRED)
+
+    if ulog is None:
+        return None, None
+
     pandadict = conv.createPandaDict(ulog)
-    return conv.merge(pandadict)
+    df = conv.merge(pandadict)
+    # change to seconds
+    df.timestamp = (df.timestamp - df.timestamp[0]) * 1e-6
+    return df, ulog
 
 
 def add_roll_pitch_yaw(df):
@@ -200,13 +213,10 @@ def main():
 
     with PdfPages("px4_attitude.pdf") as pdf:
 
-        topics = ["vehicle_attitude", "vehicle_attitude_setpoint"]
-        ulog = pyulog.ULog(args.filename, topics)
-        pandadict = conv.createPandaDict(ulog)
-        df = conv.merge(pandadict)
-        df.timestamp = (
-            df.timestamp - df.timestamp[0]
-        ) * 1e-6  # change to seconds
+        df, ulog = get_attitude_state_setpoint_from_file(args.filename)
+        if df is None:
+            print("Required topics not present")
+            return
 
         # roll pitch and yaw error
         add_roll_pitch_yaw(df)
