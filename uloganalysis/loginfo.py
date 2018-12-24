@@ -6,6 +6,33 @@ import numpy as np
 import datetime
 
 
+def get_ulog(filepath, topics):
+
+    ulog = pyulog.ULog(filepath, topics)
+
+    if not ulog.data_list:
+        print("\033[93m" + "Not a single desired topic present" + "\033[0m")
+        return None
+
+    tmp = topics.copy()
+
+    for topic in ulog.data_list:
+        if topic.name in tmp:
+            idx = tmp.index(topic.name)
+            tmp.pop(idx)
+
+    if len(tmp) > 0:
+        print(
+            "\033[93m"
+            + "The following topics do not exist in the provided ulog file: "
+            + "\033[0m"
+        )
+        print(topics)
+        return None
+
+    return ulog
+
+
 def get_starttime(ulog):
     m1, s1 = divmod(int(ulog.start_timestamp / 1e6), 60)
     h1, m1 = divmod(m1, 60)
@@ -36,3 +63,11 @@ def get_param(ulog, parameter_name, default):
         return ulog.initial_parameters[parameter_name]
     else:
         return default
+
+
+def add_param(ulog, parameter_name, dataframe):
+    dataframe["parameter_name"] = get_param(ulog, parameter_name, 0)
+    if len(ulog.changed_parameters) > 0:
+        for time, name, value in ulog.changed_parameters:
+            if name == parameter_name:
+                dataframe[dataframe[parameter_name]]
