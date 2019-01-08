@@ -18,6 +18,9 @@ from matplotlib.backends.backend_pdf import PdfPages
 parser = argparse.ArgumentParser(description="Script to process attitude")
 parser.add_argument("filename", metavar="file.ulg", help="ulog file")
 
+# To run this scipt, the following topics are
+TOPICS_REQUIRED = []
+
 
 def check_directory(filename):
     if os.path.isfile(filename):
@@ -28,6 +31,27 @@ def check_directory(filename):
             return
     else:
         parser.error("File does not exist")
+
+
+def get_required_topics():
+    return TOPICS_REQUIRED
+
+
+def get_vehiclestatus_from_file(f):
+    """
+    return dataframe and ulog for topics
+    """
+
+    ulog = pyulog.ULog(f, TOPICS_REQUIRED)
+
+    if ulog is None:
+        return None, None
+
+    pandadict = conv.createPandaDict(ulog)
+    df = conv.merge(pandadict)
+    # change to seconds
+    df.timestamp = (df.timestamp - df.timestamp[0]) * 1e-6
+    return df, ulog
 
 
 def print_pdf(df, pdf, topic_1, topic_2, title, y_label, iterator):
@@ -42,21 +66,13 @@ def print_pdf(df, pdf, topic_1, topic_2, title, y_label, iterator):
     plt.close(iterator)
 
 
-def main():
-    args = parser.parse_args()
-    check_directory(args.filename)
+# def main():
+# args = parser.parse_args()
+# check_directory(args.filename)
 
-    with PdfPages("px4_vehicle_status.pdf") as pdf:
+# with PdfPages("px4_vehicle_status.pdf") as pdf:
 
-        topics = [
-
-        ]
-
-        ulog = pyulog.ULog(args.filename, topics)
-        pandadict = conv.createPandaDict(ulog)
-        df = conv.merge(pandadict)
-        df.timestamp = (
-            df.timestamp - df.timestamp[0]
-        ) * 1e-6  # change to seconds
-
-        # print("PDF was created")
+#     df, ulog = get_vehiclestatus_from_file(args.filename)
+#     if df is None:
+#         print("Required topics not present")
+#         return

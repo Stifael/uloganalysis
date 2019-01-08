@@ -42,7 +42,7 @@ def get_attitude_state_setpoint_from_file(f):
     return dataframe and ulog for attitude/setpoint topic
     """
 
-    ulog = pyulog.ULog(f, TOPICS_REQUIRED)
+    ulog = loginfo.get_ulog(f, TOPICS_REQUIRED)
 
     if ulog is None:
         return None, None
