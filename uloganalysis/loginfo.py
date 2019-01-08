@@ -27,7 +27,7 @@ def get_ulog(filepath, topics):
             + "The following topics do not exist in the provided ulog file: "
             + "\033[0m"
         )
-        print(topics)
+        print(tmp)
         return None
 
     return ulog
