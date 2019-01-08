@@ -6,6 +6,7 @@ import pyulog
 from uloganalysis import ulogconv as conv
 from uloganalysis import mathpandas as mpd
 from uloganalysis import plotwrapper as pltw
+from uloganalysis import loginfo
 
 import matplotlib
 
@@ -25,6 +26,11 @@ TOPICS_REQUIRED = [
     "position_setpoint_triplet",
 ]
 
+COLUMNS_ZERO_ORDER_HOLD = [
+    "T_position_setpoint_triplet_0__F_current_lat",
+    "T_position_setpoint_triplet_0__F_current_lon",
+]
+
 
 def check_directory(filename):
     if os.path.isfile(filename):
@@ -37,52 +43,58 @@ def check_directory(filename):
         parser.error("File does not exist")
 
 
+def get_required_topics():
+    return TOPICS_REQUIRED
+
+
 def get_global_state_setpoint_from_file(f):
     """
     return dataframe and ulog for global position and triplet
     """
-    ulog = pyulog.ULog(f, TOPICS_REQUIRED)
+    ulog = loginfo.get_ulog(f, TOPICS_REQUIRED)
+    # ulog = pyulog.ULog(f, TOPICS_REQUIRED)
 
     if ulog is None:
         return None, None
 
     pandadict = conv.createPandaDict(ulog)
-    df = conv.merge(pandadict, method="zero")
+
+    df = conv.merge(pandadict, COLUMNS_ZERO_ORDER_HOLD)
     # change to seconds
     df.timestamp = (df.timestamp - df.timestamp[0]) * 1e-6
 
     # only consider dataframe where global reference is provide
-    # xy_global is True if xy_glboal == 1, False if xy_global == 0
-    df = df[
+    # xy_global is True if xy_global == 1, False if xy_global == 0
+    df = df[  # xy_global needs to be true
         (df["T_vehicle_local_position_0__F_xy_global"] > 0.1)
-        & (  # xy_global needs to be true
+        & (  # z_global needs to be true
             df["T_vehicle_local_position_0__F_z_global"] > 0.1
         )
-        & (  # z_global needs to be true
+        & (  # lat needs to be larger than -80  TODO is that correct?
             df["T_vehicle_global_position_0__F_lat"] >= -80
         )
-        & (  # lat needs to be larger than -80
+        & (  # lat needs to be smaller than 84 TODO is that correct?
             df["T_vehicle_global_position_0__F_lat"] <= 80
         )
-        & (  # lat needs to be smaller than 84
+        & (  # lon needs to be larger than -180
             df["T_vehicle_global_position_0__F_lon"] >= -180
         )
-        & (  # lon needs to be larger than -180
+        & (  # lon needs to be smaller than 180
             df["T_vehicle_global_position_0__F_lon"] <= 180
         )
-        & (  # lon needs to be smaller than 180
+        & (  # lat needs to be larger than -80
             df["T_position_setpoint_triplet_0__F_current_lat"] >= -80
         )
-        & (  # lat needs to be larger than -80
+        & (  # lat needs to be smaller than 84
             df["T_position_setpoint_triplet_0__F_current_lat"] <= 80
         )
-        & (  # lat needs to be smaller than 84
+        & (  # lon needs to be larger than -180
             df["T_position_setpoint_triplet_0__F_current_lon"] >= -180
         )
-        & (  # lon needs to be larger than -180
+        & (  # lon needs to be smaller than 180 TODO shouldnt that be long?
             df["T_position_setpoint_triplet_0__F_current_lat"] <= 180
         )
-    ]  # lon needs to be smaller than 180
+    ]
 
     return df, ulog
 
@@ -113,7 +125,7 @@ def add_UTM_from_reference(df):
 def add_UTM_setpoint_relative_to_reference(df):
     if "T_position_setpoint_triplet_0__NF_current_easting" not in df:
         add_UTM_from_global_target_setpoin(df)
-        print("sp nt present")
+        print("sp not present")
 
     if "T_vehicle_local_position_0__NF_ref_easting" not in df:
         add_UTM_from_reference(df)
@@ -163,7 +175,7 @@ def main():
 
         df, ulog = get_global_state_setpoint_from_file(args.filename)
 
-        if df is None:
+        if df is None:  # don't we need to check for every single topic?
             print("Topics are not present!")
             return
 

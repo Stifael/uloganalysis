@@ -65,25 +65,12 @@ def merge_asof(pandadict, on=None, direction=None):
     return m
 
 
-def merge(
-    pandadict,
-    how=None,
-    method=None,
-    limit=None,
-    limit_direction=None,
-    limit_area=None,
-):
+def merge(pandadict, columns_zero_order_hold):
     """
     pandas merge method applied to pandadict
     @params pandadict: a dictionary of pandas dataframe
     @params method/limit/limit_direction/limit_area: see pandas interpolate method
     """
-    if how is None:
-        how = "outer"
-    if method is None:
-        method = "linear"
-    if limit_direction is None:
-        limit_direction = "both"
 
     combineTopicFieldName(pandadict)
     skip = True
@@ -92,20 +79,23 @@ def merge(
             m = pandadict[topic]
             skip = False
         else:
-            m = pd.merge_ordered(m, pandadict[topic], on="timestamp", how=how)
+            m = pd.merge_ordered(
+                m, pandadict[topic], on="timestamp", how="outer"
+            )
     m.index = pd.TimedeltaIndex(m.timestamp * 1e3, unit="ns")
 
-    if method is "zero":
-        m = m.fillna(method="ffill")
-        m.dropna()
-    else:
-        m.interpolate(
-            method=method,
-            limit=limit,
-            inplace=True,
-            limit_direction=limit_direction,
-            limit_area=limit_area,
-        )
+    # apply zero order hold for some selected topics
+    m[columns_zero_order_hold] = m[columns_zero_order_hold].fillna(
+        method="ffill"
+    )
+
+    # apply interpolation to the whole dataframe (only NaN values get interpolated,
+    # thus the zero order hold values from before do not get overwritten)
+    m = m.interpolate(method="linear")
+
+    # drop all values that are still NaN
+    m.dropna()
+
     return m
 
 
