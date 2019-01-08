@@ -24,12 +24,17 @@ TOPICS_REQUIRED = [
     "vehicle_global_position",
     "vehicle_local_position",
     "position_setpoint_triplet",
+    "vehicle_status",
 ]
 
 COLUMNS_ZERO_ORDER_HOLD = [
     "T_position_setpoint_triplet_0__F_current_lat",
     "T_position_setpoint_triplet_0__F_current_lon",
+    "T_vehicle_status_0__F_nav_state",
 ]
+
+# store the values for all auto navigation states in a list
+NAVIGATION_STATE_AUTO = list(range(3, 9))
 
 
 def check_directory(filename):
@@ -175,7 +180,7 @@ def main():
 
         df, ulog = get_global_state_setpoint_from_file(args.filename)
 
-        if df is None:  # don't we need to check for every single topic?
+        if df is None:
             print("Topics are not present!")
             return
 
@@ -185,59 +190,95 @@ def main():
         add_UTM_from_global_position(df)
         add_UTM_position_relative_to_reference(df)
 
-        ## global path with setpoint ins UTM
-        plt.figure(0, figsize=(20, 13))
-        df_tmp = df[
-            [
-                "T_vehicle_global_position_0__NF_easting_relative",
-                "T_vehicle_global_position_0__NF_northing_relative",
-            ]
-        ].copy()
+        # give all rows with an auto navigation state the same number
+        auto_state_group_number = -1
+        df_manipulate = df.copy()
+        for i in NAVIGATION_STATE_AUTO:
+            df_manipulate.loc[
+                df["T_vehicle_status_0__F_nav_state"] == i,
+                ["T_vehicle_status_0__F_nav_state"],
+            ] = auto_state_group_number
 
-        plt.plot(
-            df["T_position_setpoint_triplet_0__NF_current_easting_relative"],
-            df["T_position_setpoint_triplet_0__NF_current_northing_relative"],
-            "rD--",
-            label="Waypoint",
-        )
-        plt.plot(
-            df["T_vehicle_global_position_0__NF_easting_relative"],
-            df["T_vehicle_global_position_0__NF_northing_relative"],
-            "g",
-            label="Estimation",
+        # group the rows by the status value they contain
+        df_manipulate["T_vehicle_status_0__F_nav_state_group2"] = (
+            df_manipulate.T_vehicle_status_0__F_nav_state
+            != df_manipulate.T_vehicle_status_0__F_nav_state.shift()
+        ).cumsum()
+        state_group = df_manipulate.groupby(
+            ["T_vehicle_status_0__F_nav_state_group2"]
         )
 
-        group_easting = df.groupby(
-            ["T_position_setpoint_triplet_0__NF_current_easting_relative"]
-        )
-        waypoints = {"time": [], "east": [], "north": []}
-        for g, d in group_easting:
-            waypoints["east"].append(g)
-            waypoints["time"].append(d["timestamp"][0])
-            waypoints["north"].append(
-                d[
-                    "T_position_setpoint_triplet_0__NF_current_northing_relative"
-                ][0]
-            )
+        # for each time the drone went into an auto mode with setpoints, create a new plot!
+        figure_number = 0
+        for g, d in state_group:
+            if (
+                d["T_vehicle_status_0__F_nav_state"][0]
+                == auto_state_group_number
+            ):
+                ## global path with setpoint in UTM
+                plt.figure(figure_number, figsize=(20, 13))
+                df_tmp = d[
+                    [
+                        "T_vehicle_global_position_0__NF_easting_relative",
+                        "T_vehicle_global_position_0__NF_northing_relative",
+                    ]
+                ].copy()
 
-        waypoints = pd.DataFrame(data=waypoints)
-        waypoints = waypoints.sort_values(by="time")
-        waypoints = waypoints.reset_index(drop=True)
-        plt.text(
-            waypoints["east"].iloc[0] + 0.4,
-            waypoints["north"].iloc[0],
-            "Start",
-            color="black",
-            fontsize=18,
-        )
-        plt.legend()
-        plt.title("UTM trajectories")
-        plt.grid()
-        pdf.savefig()
-        plt.close(0)
+                plt.plot(
+                    d[
+                        "T_position_setpoint_triplet_0__NF_current_easting_relative"
+                    ],
+                    d[
+                        "T_position_setpoint_triplet_0__NF_current_northing_relative"
+                    ],
+                    "rD--",
+                    label="Waypoint",
+                )
+                plt.plot(
+                    d["T_vehicle_global_position_0__NF_easting_relative"],
+                    d["T_vehicle_global_position_0__NF_northing_relative"],
+                    "g",
+                    label="Estimation",
+                )
+
+                group_easting = d.groupby(
+                    [
+                        "T_position_setpoint_triplet_0__NF_current_easting_relative"
+                    ]
+                )
+                waypoints = {"time": [], "east": [], "north": []}
+                for g, d in group_easting:
+                    waypoints["east"].append(g)
+                    waypoints["time"].append(d["timestamp"][0])
+                    waypoints["north"].append(
+                        d[
+                            "T_position_setpoint_triplet_0__NF_current_northing_relative"
+                        ][0]
+                    )
+
+                waypoints = pd.DataFrame(data=waypoints)
+                waypoints = waypoints.sort_values(by="time")
+                waypoints = waypoints.reset_index(drop=True)
+                plt.text(
+                    waypoints["east"].iloc[0] + 0.4,
+                    waypoints["north"].iloc[0],
+                    "Start",
+                    color="black",
+                    fontsize=18,
+                )
+                plt.legend()
+                plt.title("UTM trajectories")
+                plt.ylabel("local position x")
+                plt.xlabel("local position y")
+                plt.axis("equal")
+                plt.grid()
+                pdf.savefig()
+                plt.close(0)
+
+                figure_number = figure_number + 1
 
         ## easting and northing setpoints and state
-        plt.figure(1, figsize=(20, 13))
+        plt.figure(figure_number, figsize=(20, 13))
         df_tmp = df[
             [
                 "timestamp",
@@ -254,3 +295,18 @@ def main():
         plt.xlabel("meters")
         pdf.savefig()
         plt.close(1)
+
+        figure_number = figure_number + 1
+
+        # vehicle status
+        plt.figure(figure_number, figsize=(20, 13))
+        df_tmp = df[["timestamp", "T_vehicle_status_0__F_nav_state"]].copy()
+        df_tmp.plot(x="timestamp", linewidth=0.8)
+        pltw.plot_time_series(df_tmp, plt)
+        plt.title("vehicle status")
+        plt.ylabel("meters")
+        plt.xlabel("meters")
+        pdf.savefig()
+        plt.close(1)
+
+        figure_number = figure_number + 1
