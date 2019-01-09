@@ -96,8 +96,8 @@ def get_global_state_setpoint_from_file(f):
         & (  # lon needs to be larger than -180
             df["T_position_setpoint_triplet_0__F_current_lon"] >= -180
         )
-        & (  # lon needs to be smaller than 180 TODO shouldnt that be long?
-            df["T_position_setpoint_triplet_0__F_current_lat"] <= 180
+        & (  # lon needs to be smaller than 180
+            df["T_position_setpoint_triplet_0__F_current_lon"] <= 180
         )
     ]
 
