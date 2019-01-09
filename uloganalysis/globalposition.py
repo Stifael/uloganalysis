@@ -130,11 +130,9 @@ def add_UTM_from_reference(df):
 def add_UTM_setpoint_relative_to_reference(df):
     if "T_position_setpoint_triplet_0__NF_current_easting" not in df:
         add_UTM_from_global_target_setpoin(df)
-        print("sp not present")
 
     if "T_vehicle_local_position_0__NF_ref_easting" not in df:
         add_UTM_from_reference(df)
-        print("ref not present")
 
     df["T_position_setpoint_triplet_0__NF_current_easting_relative"] = (
         df["T_position_setpoint_triplet_0__NF_current_easting"].values
