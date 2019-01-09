@@ -65,11 +65,13 @@ def merge_asof(pandadict, on=None, direction=None):
     return m
 
 
-def merge(pandadict, columns_zero_order_hold):
+def merge(pandadict, columns_zero_order_hold=None):
     """
     pandas merge method applied to pandadict
     @params pandadict: a dictionary of pandas dataframe
-    @params method/limit/limit_direction/limit_area: see pandas interpolate method
+    @params column_zero_order_hold: by default merge will use linear
+            interpolation. column_zero_order_hold specifies which messages
+            of pandadict are interpolated with zero-order-hold method.
     """
 
     combineTopicFieldName(pandadict)
@@ -85,9 +87,10 @@ def merge(pandadict, columns_zero_order_hold):
     m.index = pd.TimedeltaIndex(m.timestamp * 1e3, unit="ns")
 
     # apply zero order hold for some selected topics
-    m[columns_zero_order_hold] = m[columns_zero_order_hold].fillna(
-        method="ffill"
-    )
+    if columns_zero_order_hold is not None:
+        m[columns_zero_order_hold] = m[columns_zero_order_hold].fillna(
+            method="ffill"
+        )
 
     # apply interpolation to the whole dataframe (only NaN values get interpolated,
     # thus the zero order hold values from before do not get overwritten)
