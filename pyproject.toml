@@ -12,6 +12,7 @@ requires=[
         "numpy (>= 1.15.3)",
         "pandas (>= 0.23.4)",
         "pyulog (>= 0.6.0)",
+        "utm (>= 0.4.2)",
         "transforms3d",
 ]
 requires-python='>=3.6'
