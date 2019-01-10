@@ -7,6 +7,7 @@ from uloganalysis import ulogconv as conv
 from uloganalysis import mathpandas as mpd
 from uloganalysis import plotwrapper as pltw
 from uloganalysis import loginfo
+from uloganalysis import dfUlg
 
 import matplotlib
 
@@ -14,44 +15,30 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
-
 parser = argparse.ArgumentParser(description="Script to process attitude")
 parser.add_argument("filename", metavar="file.ulg", help="ulog file")
 
-# To run this scipt, the following topics are
-TOPICS_REQUIRED = ["vehicle_attitude", "vehicle_attitude_setpoint"]
 
-
-def check_directory(filename):
-    if os.path.isfile(filename):
-        base, ext = os.path.splitext(filename)
-        if ext.lower() not in (".ulg"):
-            parser.error("File is not .ulg file")
-        else:
-            return
-    else:
-        parser.error("File does not exist")
-
-
-def get_required_topics():
-    return TOPICS_REQUIRED
-
-
-def get_attitude_state_setpoint_from_file(f):
+class dfUlgAttitude(dfUlg.dfUlgBase):
     """
-    return dataframe and ulog for attitude/setpoint topic
+    dfUlgBase-Childclass for attitude and attitude-septoint topic
     """
 
-    ulog = loginfo.get_ulog(f, TOPICS_REQUIRED)
+    @classmethod
+    def get_required_topics(self):
+        """
+        Returns:
+            List of required topics
+        """
+        return ["vehicle_attitude", "vehicle_attitude_setpoint"]
 
-    if ulog is None:
-        return None, None
-
-    pandadict = conv.createPandaDict(ulog)
-    df = conv.merge(pandadict)
-    # change to seconds
-    df.timestamp = (df.timestamp - df.timestamp[0]) * 1e-6
-    return df, ulog
+    @classmethod
+    def get_required_zoh_topics(self):
+        """
+        Returns:
+            List of topics on which zoh is applied
+        """
+        return []
 
 
 def add_roll_pitch_yaw(df):
@@ -209,21 +196,17 @@ def add_desired_z_axis(df):
 
 def main():
     args = parser.parse_args()
-    check_directory(args.filename)
+    # create dataframe-ulog class for Attitude/Attiutde-setpoint topic
+    att = dfUlgAttitude.create(args.filename)
 
     with PdfPages("px4_attitude.pdf") as pdf:
 
-        df, ulog = get_attitude_state_setpoint_from_file(args.filename)
-        if df is None:
-            print("Required topics not present")
-            return
-
         # roll pitch and yaw error
-        add_roll_pitch_yaw(df)
-        add_euler_error(df)
+        add_roll_pitch_yaw(att.df)
+        add_euler_error(att.df)
 
         plt.figure(0, figsize=(20, 13))
-        df_tmp = df[
+        df_tmp = att.df[
             [
                 "timestamp",
                 "T_vehicle_attitude_setpoint_0__NF_e_roll",
@@ -239,10 +222,10 @@ def main():
         plt.close(0)
 
         # inverted
-        add_vehicle_z_axis(df)
-        add_vehicle_inverted(df)
+        add_vehicle_z_axis(att.df)
+        add_vehicle_inverted(att.df)
         plt.figure(1, figsize=(20, 13))
-        df_tmp = df[
+        df_tmp = att.df[
             ["timestamp", "T_vehicle_attitude_0__NF_tilt_more_90"]
         ].copy()
         df_tmp.plot(x="timestamp", linewidth=0.8)
@@ -253,14 +236,14 @@ def main():
         plt.close(1)
 
         # tilt and desired tilt
-        add_desired_z_axis(df)
-        add_desired_tilt(df)
-        add_tilt(df)
+        add_desired_z_axis(att.df)
+        add_desired_tilt(att.df)
+        add_tilt(att.df)
 
-        pos_tilt = loginfo.get_param(ulog, "MPC_TILTMAX_AIR", 0)
-        man_tilt = loginfo.get_param(ulog, "MPC_MAN_TILT_MAX", 0)
+        pos_tilt = loginfo.get_param(att.ulog, "MPC_TILTMAX_AIR", 0)
+        man_tilt = loginfo.get_param(att.ulog, "MPC_MAN_TILT_MAX", 0)
         plt.figure(2, figsize=(20, 13))
-        df_tmp = df[
+        df_tmp = att.df[
             [
                 "timestamp",
                 "T_vehicle_attitude_0__NF_tilt",
@@ -276,3 +259,5 @@ def main():
         plt.ylabel("rad")
         pdf.savefig()
         plt.close(2)
+
+        print("px4_attitude.pdf was created")

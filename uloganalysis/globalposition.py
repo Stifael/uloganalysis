@@ -7,6 +7,7 @@ from uloganalysis import ulogconv as conv
 from uloganalysis import mathpandas as mpd
 from uloganalysis import plotwrapper as pltw
 from uloganalysis import loginfo
+from uloganalysis import dfUlg
 
 import matplotlib
 
@@ -19,55 +20,39 @@ parser = argparse.ArgumentParser(
 )
 parser.add_argument("filename", metavar="file.ulg", help="ulog file")
 
-# To run this script, the following topics are required
-TOPICS_REQUIRED = [
-    "vehicle_global_position",
-    "vehicle_local_position",
-    "position_setpoint_triplet",
-    "vehicle_status",
-]
 
-COLUMNS_ZERO_ORDER_HOLD = [
-    "T_position_setpoint_triplet_0__F_current_lat",
-    "T_position_setpoint_triplet_0__F_current_lon",
-    "T_vehicle_status_0__F_nav_state",
-]
-
-# store the values for all auto navigation states in a list
-NAVIGATION_STATE_AUTO = list(range(3, 9))
-
-
-def check_directory(filename):
-    if os.path.isfile(filename):
-        base, ext = os.path.splitext(filename)
-        if ext.lower() not in (".ulg"):
-            parser.error("File is not .ulg file")
-        else:
-            return
-    else:
-        parser.error("File does not exist")
-
-
-def get_required_topics():
-    return TOPICS_REQUIRED
-
-
-def get_global_state_setpoint_from_file(f):
+class dfUlgPositionGlobal(dfUlg.dfUlgBase):
     """
-    return dataframe and ulog for global position and triplet
+    dfUlgBase-Childclass for global position- and setpoint-topics
     """
-    ulog = loginfo.get_ulog(f, TOPICS_REQUIRED)
-    # ulog = pyulog.ULog(f, TOPICS_REQUIRED)
 
-    if ulog is None:
-        return None, None
+    @classmethod
+    def get_required_topics(cls):
+        """
+        Returns:
+            List of required topics
+        """
+        return [
+            "vehicle_global_position",
+            "vehicle_local_position",
+            "position_setpoint_triplet",
+            "vehicle_status",
+        ]
 
-    pandadict = conv.createPandaDict(ulog)
+    @classmethod
+    def get_required_zoh_topics(cls):
+        """
+        Returns:
+            List of messages on which zoh is applied
+        """
+        return [
+            "T_position_setpoint_triplet_0__F_current_lat",
+            "T_position_setpoint_triplet_0__F_current_lon",
+            "T_vehicle_status_0__F_nav_state",
+        ]
 
-    df = conv.merge(pandadict, COLUMNS_ZERO_ORDER_HOLD)
-    # change to seconds
-    df.timestamp = (df.timestamp - df.timestamp[0]) * 1e-6
 
+def apply_UTM_constraints(df):
     # only consider dataframe where global reference is provide
     # xy_global is True if xy_global == 1, False if xy_global == 0
     df = df[  # xy_global needs to be true
@@ -100,8 +85,7 @@ def get_global_state_setpoint_from_file(f):
             df["T_position_setpoint_triplet_0__F_current_lon"] <= 180
         )
     ]
-
-    return df, ulog
+    return df
 
 
 def add_UTM_from_global_target_setpoin(df):
@@ -172,28 +156,27 @@ def add_UTM_position_relative_to_reference(df):
 
 def main():
     args = parser.parse_args()
-    check_directory(args.filename)
+    # create dataframe-ulog class for Attitude/Attiutde-setpoint topic
+    posg = dfUlgPositionGlobal.create(args.filename)
+    posg.df = apply_UTM_constraints(posg.df)  # apply UTM constraints
+
+    # store the values for all auto navigation states in a list
+    NAVIGATION_STATE_AUTO = list(range(3, 9))
 
     with PdfPages("px4_global_to_local.pdf") as pdf:
 
-        df, ulog = get_global_state_setpoint_from_file(args.filename)
-
-        if df is None:
-            print("Topics are not present!")
-            return
-
-        add_UTM_from_global_target_setpoin(df)
-        add_UTM_from_reference(df)
-        add_UTM_setpoint_relative_to_reference(df)
-        add_UTM_from_global_position(df)
-        add_UTM_position_relative_to_reference(df)
+        add_UTM_from_global_target_setpoin(posg.df)
+        add_UTM_from_reference(posg.df)
+        add_UTM_setpoint_relative_to_reference(posg.df)
+        add_UTM_from_global_position(posg.df)
+        add_UTM_position_relative_to_reference(posg.df)
 
         # give all rows with an auto navigation state the same number
         auto_state_group_number = -1
-        df_manipulate = df.copy()
+        df_manipulate = posg.df.copy()
         for i in NAVIGATION_STATE_AUTO:
             df_manipulate.loc[
-                df["T_vehicle_status_0__F_nav_state"] == i,
+                posg.df["T_vehicle_status_0__F_nav_state"] == i,
                 ["T_vehicle_status_0__F_nav_state"],
             ] = auto_state_group_number
 
@@ -277,7 +260,7 @@ def main():
 
         ## easting and northing setpoints and state
         plt.figure(figure_number, figsize=(20, 13))
-        df_tmp = df[
+        df_tmp = posg.df[
             [
                 "timestamp",
                 "T_position_setpoint_triplet_0__NF_current_easting_relative",
@@ -298,7 +281,9 @@ def main():
 
         # vehicle status
         plt.figure(figure_number, figsize=(20, 13))
-        df_tmp = df[["timestamp", "T_vehicle_status_0__F_nav_state"]].copy()
+        df_tmp = posg.df[
+            ["timestamp", "T_vehicle_status_0__F_nav_state"]
+        ].copy()
         df_tmp.plot(x="timestamp", linewidth=0.8)
         pltw.plot_time_series(df_tmp, plt)
         plt.title("vehicle status")
@@ -308,3 +293,5 @@ def main():
         plt.close(1)
 
         figure_number = figure_number + 1
+
+        print("px4_global_to_local.pdf was created")

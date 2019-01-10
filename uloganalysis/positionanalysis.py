@@ -7,6 +7,7 @@ from uloganalysis import ulogconv as conv
 from uloganalysis import mathpandas as mpd
 from uloganalysis import plotwrapper as pltw
 from uloganalysis import loginfo
+from uloganalysis import dfUlg
 
 import matplotlib
 
@@ -14,43 +15,30 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
-
 parser = argparse.ArgumentParser(description="Script to process attitude")
 parser.add_argument("filename", metavar="file.ulg", help="ulog file")
 
-# To run this scipt, the following topics are
-TOPICS_REQUIRED = ["vehicle_local_position", "vehicle_local_position_setpoint"]
 
-
-def check_directory(filename):
-    if os.path.isfile(filename):
-        base, ext = os.path.splitext(filename)
-        if ext.lower() not in (".ulg"):
-            parser.error("File is not .ulg file")
-        else:
-            return
-    else:
-        parser.error("File does not exist")
-
-
-def get_required_topics():
-    return TOPICS_REQUIRED
-
-
-def get_position_state_setpoint_from_file(f):
+class dfUlgPosition(dfUlg.dfUlgBase):
     """
-    return dataframe and ulog for position/setpoint topic
+    dfUlgBase-Childclass for position and position-septoint topic
     """
-    ulog = loginfo.get_ulog(f, TOPICS_REQUIRED)
 
-    if ulog is None:
-        return None, None
+    @classmethod
+    def get_required_topics(cls):
+        """
+        Returns:
+            List of required topics
+        """
+        return ["vehicle_local_position", "vehicle_local_position_setpoint"]
 
-    pandadict = conv.createPandaDict(ulog)
-    df = conv.merge(pandadict)
-    # change to seconds
-    df.timestamp = (df.timestamp - df.timestamp[0]) * 1e-6
-    return df, ulog
+    @classmethod
+    def get_required_zoh_topics(cls):
+        """
+        Returns:
+            List of messages on which zoh is applied
+        """
+        return []
 
 
 def print_pdf(df, pdf, topic_1, topic_2, title, y_label, iterator):
@@ -83,22 +71,17 @@ def add_horizontal_distance(df):
 
 def main():
     args = parser.parse_args()
-    check_directory(args.filename)
+    # create dataframe-ulog class for Position/Position-setpoint topic
+    pos = dfUlgPosition.create(args.filename)
 
     with PdfPages("px4_position.pdf") as pdf:
 
-        df, ulog = get_position_state_setpoint_from_file(args.filename)
-
-        if df is None:
-            print("Required topics not present")
-            return
-
-        add_horizontal_distance(df)
+        add_horizontal_distance(pos.df)
 
         # TODO: make print_pdf adapt to different numbers of messages
         # desired and measured x position
         print_pdf(
-            df,
+            pos.df,
             pdf,
             "T_vehicle_local_position_0__F_x",
             "T_vehicle_local_position_setpoint_0__F_x",
@@ -109,7 +92,7 @@ def main():
 
         # desired and measured y position
         print_pdf(
-            df,
+            pos.df,
             pdf,
             "T_vehicle_local_position_0__F_y",
             "T_vehicle_local_position_setpoint_0__F_y",
@@ -120,7 +103,7 @@ def main():
 
         # desired and measured z position
         print_pdf(
-            df,
+            pos.df,
             pdf,
             "T_vehicle_local_position_0__F_z",
             "T_vehicle_local_position_setpoint_0__F_z",
@@ -131,7 +114,7 @@ def main():
 
         # horizontal distance to home
         print_pdf(
-            df,
+            pos.df,
             pdf,
             "T_vehicle_local_position_0__NF_abs_horizontal_dist",
             "T_vehicle_local_position_0__NF_abs_horizontal_dist",
@@ -140,4 +123,4 @@ def main():
             3,
         )
 
-        print("PDF was created")
+        print("px4_position.pdf was created")
